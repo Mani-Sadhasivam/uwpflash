@@ -122,7 +122,8 @@ void *uart_thread(void *arg)
 
 	int recv_len = 1024;
 	char recv_buf[recv_len];
-	printf("tty_fd: %d.\n", tty_fd);
+
+	//printf("tty_fd: %d.\n", tty_fd);
 
 	while(1)
 	{
@@ -140,7 +141,7 @@ void *uart_thread(void *arg)
 		} else if(ret &&  FD_ISSET(tty_fd, &fs_read)) {
 			if (notify) notify();
 		} else {
-			printf("select timeout");
+			//printf("select timeout");
 		}
 	}
 
@@ -181,13 +182,15 @@ int uart_init(char *dev)
 }
 int uart_send(char *data, int len)
 {
-	int i;
 	int send;
+#if 0
+	int i;
 	printf("uart send %d bytes.\n", len);
 	for(i = 0; i < len; i++) {
-		printf("%02x ", data[i]);
+		printf("%02x ", (unsigned char)data[i]);
 	}
 	printf("\n");
+#endif
 	send = write(tty_fd, data, len);
 	if (send == len)
 		return 0;
@@ -202,13 +205,15 @@ int uart_recv(char *buf, int len)
 
 	readlen = read(tty_fd, buf, len);
 
+#if 0
 	printf("uart recv %d bytes.\n", readlen);
 	if (readlen > 0) {
 		for(i = 0; i < readlen; i++) {
-			printf("%02x ", buf[i]);
+			printf("%02x ", (unsigned char)buf[i]);
 		}
 		printf("\n");
 	}
+#endif
 	return readlen;
 }
 

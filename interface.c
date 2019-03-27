@@ -3,12 +3,18 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <termios.h>
+#include <pthread.h>
 #include <semaphore.h>
 
 #include "interface.h"
 #include "command.h"
 #include "crc.h"
 
+static int intf_inited;
 static sem_t sem_recv;
 static struct interface *intf;
 extern struct interface uart_intf;
@@ -17,20 +23,22 @@ int intf_recv(unsigned char *data, unsigned int len, int timeout)
 {
 	int ret, i;
 	int recv_len = 0;
-	char *crc_data;
+	char *crc_data = NULL;
 	int crc_len;
 	struct timespec wait_time;
 	int data_start = -1;
 	int data_end = -1;
 
-	wait_time.tv_sec = timeout;
-	wait_time.tv_nsec = 0;
+	clock_gettime(CLOCK_REALTIME, &wait_time);
+	wait_time.tv_sec += timeout;
+
+	if (!intf_inited) {
+		printf("intf is not init.\n");
+		return -1;
+	}
 
 	ret = sem_timedwait(&sem_recv, &wait_time);
-	if (ret == ETIMEDOUT) {
-		return -2;	/* Timeout */
-	} else if (ret) {
-		printf("sem_wait failed.\n");
+	if (ret != 0) {
 		return -1;
 	}
 
@@ -55,24 +63,29 @@ int intf_recv(unsigned char *data, unsigned int len, int timeout)
 	if ((data_start != -1) && (data_end != -1)) {
 		ret = decode_msg(data + data_start, data_end - data_start + 1,
 				&crc_data, &crc_len, 1);
-		printf("decode return: %d.\n", ret);
 		if (ret != 1) {
-			printf("decode error: %d.\n", ret);
-			ret= -1;
-			goto err_out;
+			ret = decode_msg(data + data_start, data_end - data_start + 1, &crc_data, &crc_len, 0);
+			if (ret != 1) {
+				printf("decode ret: %d.\n", ret);
+				ret= -1;
+				goto err_out;
+			}
 		}
 
+#if 0
+		printf("decode return: %d.\n", ret);
 		for(i = 0; i < crc_len; i++) {
 			printf("%02x ", crc_data[i]);
 		}
 		printf("\n");
+#endif
+		memcpy(data, crc_data, crc_len);
+		ret = crc_len;
 	}
 
-	memcpy(data, crc_data, crc_len);
-	ret = crc_len;
-
 err_out:
-	free(crc_data);
+	if (crc_data)
+		free(crc_data);
 
 	return ret;
 }
@@ -116,12 +129,13 @@ err_out:
 
 void notify_recv(void)
 {
-	//printf("data recv.\n");
 	sem_post(&sem_recv);
 }
 
 int intf_init(char *type, char *dev)
 {
+	int ret;
+
 	if (strcmp(type, "UART") == 0) {
 		intf = &uart_intf;
 	} else {
@@ -133,6 +147,13 @@ int intf_init(char *type, char *dev)
 
 	intf->register_notify(notify_recv);
 
-	return intf->init(dev);
+	ret = intf->init(dev);
+	if (ret) {
+		return -1;
+	}
+
+	intf_inited = 1;
+
+	return 0;
 }
 

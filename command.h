@@ -122,5 +122,22 @@ enum CMD_TYPE
 	BSL_REP_PORT_ERROR
 };
 
+struct packet_header
+{
+	unsigned short type;
+	unsigned short size;
+};
+
+static inline unsigned int le32(unsigned int num)
+{
+	return (((num >> 24) & 0xFF) | \
+	((num >> 8) & 0xFF00) | \
+	((num << 8) & 0xFF0000) | \
+	((num << 24) & 0xFF000000));
+}
+
+#define le16(num) \
+	(num >> 8) | (num << 8)
+
 extern int cmd_connect(int timeout);
 extern int cmd_check_bandrate(int timeout);
