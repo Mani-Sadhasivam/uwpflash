@@ -29,6 +29,8 @@ enum DL_STATE {
 struct dl_file
 {
 	int fd;
+	int is_fdl;
+	unsigned char *fdl_buf;
 	unsigned int addr;
 	unsigned int pos;
 	unsigned int len;
@@ -119,10 +121,14 @@ int dl_send_data(void)
 	if (data_len > MAX_DATA_LEN)
 		data_len = MAX_DATA_LEN;
 
-	lseek(pfile->fd, pfile->pos, SEEK_SET);
+	if (pfile->is_fdl) {
+		memcpy(data_buf, pfile->fdl_buf + pfile->pos, data_len);
+	} else {
+		lseek(pfile->fd, pfile->pos, SEEK_SET);
 
-	data_len = read(pfile->fd, data_buf, data_len);
-	//printf("pos: %d, len: %d.\n", pfile->pos, data_len);
+		data_len = read(pfile->fd, data_buf, data_len);
+		//printf("pos: %d, len: %d.\n", pfile->pos, data_len);
+	}
 
 	pfile->pos += data_len;
 
@@ -217,10 +223,46 @@ void *dl_flash_thread(void *arg)
 	}
 }
 
-int dl_flash(char *fname, unsigned int addr)
+int dl_wait(void)
 {
 	int ret;
 	struct timespec wait_time;
+
+	clock_gettime(CLOCK_REALTIME, &wait_time);
+	wait_time.tv_sec += 60;
+	ret = sem_timedwait(&flash_sem, &wait_time);
+	if ((ret == -1) && (errno == ETIMEDOUT)) {
+		printf("TIMEOUT\n");
+		return -1;
+	}
+
+	if (dl_state != DL_SUCCESS)
+		return -1;
+
+	return 0;
+}
+
+int dl_flash_fdl(unsigned char *fdl, unsigned int len, unsigned int addr)
+{
+	struct dl_file *pfile = &dl_file;
+
+	memset((void*)pfile, 0, sizeof(struct dl_file));
+	pfile->is_fdl = 1;
+	pfile->addr = addr;
+	pfile->len = len;
+	pfile->fdl_buf = fdl;
+
+	printf("download FDL (%d bytes)\n", pfile->len);
+	printf("* CHECKING BANDRATE...  \t");
+	fflush(stdout);
+	dl_set_state(DL_CHECK_BAND, 1);
+
+	return dl_wait();
+}
+
+int dl_flash(char *fname, unsigned int addr)
+{
+	int ret;
 	struct dl_file *pfile = &dl_file;
 	memset((void*)pfile, 0, sizeof(struct dl_file));
 
@@ -240,26 +282,9 @@ int dl_flash(char *fname, unsigned int addr)
 
 	printf("download file %s (%d bytes)\n", fname, pfile->len);
 
-	if (strcmp(fname, "fdl.bin") == 0) {
-		printf("* CHECKING BANDRATE...  \t");
-		fflush(stdout);
-		dl_set_state(DL_CHECK_BAND, 1);
-	} else {
-		dl_set_state(DL_CONNECT, 5);
-	}
+	dl_set_state(DL_CONNECT, 5);
 	
-	clock_gettime(CLOCK_REALTIME, &wait_time);
-	wait_time.tv_sec += 60;
-	ret = sem_timedwait(&flash_sem, &wait_time);
-	if ((ret == -1) && (errno == ETIMEDOUT)) {
-		printf("TIMEOUT\n");
-		return -1;
-	}
-
-	if (dl_state != DL_SUCCESS)
-		return -1;
-
-	return 0;
+	return dl_wait();
 }
 
 int dl_init(void)

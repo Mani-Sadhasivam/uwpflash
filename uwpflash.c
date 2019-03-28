@@ -5,6 +5,8 @@
 
 #include "command.h"
 #include "interface.h"
+#include "fdl.h"
+
 #define VERSION	"0.0.1"
 #define AUTHOR "Dong Xiang <dong.xiang@unisoc.com>"
 
@@ -129,7 +131,7 @@ int main(int argc,char **argv)
 	}
 	
 
-	ret = dl_flash("fdl.bin", 0x100000);
+	ret = dl_flash_fdl(fdl, sizeof(fdl), 0x100000);
 	if (ret < 0) {
 		printf("download file failed.\n");
 		return ret;
