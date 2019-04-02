@@ -88,6 +88,9 @@ int main(int argc,char **argv)
 			case 'v':
 				printf("UNISOC uwpflash tool v" VERSION "\n");
 				break;
+			case 'd':
+				p->dev = optarg;
+				break;
 			case 'f':
 				if (fobj == NULL) {
 					fobj = fobj_alloc();
